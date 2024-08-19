@@ -11,9 +11,11 @@ public class Player : MonoBehaviour
     [SerializeField] private float _dashSpeed = 20f;
     [SerializeField] private float _dashingTime = 0.2f;
     private bool canDash = true;
+    private bool dashTransparancy = false;
+    private bool dashFinish = false;
 
-    private float _fallMultiplier = 5f;
-    private float _lowJumpMultiplier = 2f;
+    private float _fallMultiplier = 3f;
+    private float _lowJumpMultiplier = 4f;
     [SerializeField] private float _jump = 18f;
 
     [SerializeField] private float _direction = -1f;
@@ -21,33 +23,57 @@ public class Player : MonoBehaviour
     [SerializeField] private Rigidbody2D rb;
     [SerializeField] private TrailRenderer tr;
 
+    [SerializeField] public Vector2 boxSize;
+    [SerializeField] public float castDistance;
+    [SerializeField] public LayerMask layerMask;
+
+    private bool inputLock;
+
     private bool onGround;
     void Start()
     {
+        inputLock = false;
         onGround = false;
         rb = GetComponent<Rigidbody2D>();
         tr = GetComponent<TrailRenderer>();
     }
 
-    // Update is called once per frame
     void Update()
     {
-        // left and right movement
+        // Movement Input
         float horizontalInput = Input.GetAxis("Horizontal");
-        transform.Translate(Vector2.right * horizontalInput * _speed * Time.deltaTime);
-        if (Input.GetButtonDown("Fire3") && canDash)
+        var jumpInput = Input.GetButtonDown("Jump");
+        var jumpInputRelease = Input.GetButtonUp("Jump");
+        var dashInput = Input.GetButtonDown("Fire3");
+        onGround = GroundCheck();
+
+        // Left and right movement
+        if (!inputLock)
+        {
+            transform.Translate(Vector2.right * horizontalInput * _speed * Time.deltaTime);
+        }
+
+        // Dash movement logic
+        if (dashInput && canDash && !inputLock)
         {
             StartCoroutine(Dash());
-            //rb.AddForce(new Vector2(_dashSpeed, 0));
         }
-        if (onGround)
+
+        if (onGround && !inputLock && dashFinish)
         {
             canDash = true;
         }
+
+
         // Jump functionality if player is on the ground
-        if (Input.GetButtonDown("Jump") && onGround)
+        if (jumpInput && onGround && !inputLock)
         {
             rb.velocity = new Vector2(rb.velocity.x, _jump);
+        }
+
+        if (jumpInputRelease && rb.velocity.y > 0 && !inputLock)
+        {
+            rb.velocity = new Vector2(rb.velocity.x, 0);
         }
 
         // Altering gravity for faster fall
@@ -55,43 +81,60 @@ public class Player : MonoBehaviour
         {
             rb.velocity += Vector2.up * Physics2D.gravity.y * (_fallMultiplier - 1) * Time.deltaTime;
         }
-        // Allowing for different jump heights
-        else if (rb.velocity.y > 0 && !Input.GetButton("Jump"))
-        {
-            rb.velocity += Vector2.up * Physics2D.gravity.y * (_lowJumpMultiplier - 1) * Time.deltaTime;
-        }
 
         // Finding player direction
-        if (Input.GetKeyDown("a"))
+        if (Input.GetKey("a") && !inputLock)
         {
             _direction = -1f;
         }
-        if (Input.GetKeyDown("d"))
+        if (Input.GetKey("d") && !inputLock)
         {
             _direction = 1f;
         }
 
     }
-    private void OnCollisionEnter2D(Collision2D collision)
+
+    private bool GroundCheck()
     {
-        // Player is on the ground
-        if (collision.gameObject.tag == "Ground")
+        if (Physics2D.BoxCast(transform.position, boxSize, 0, -transform.up, castDistance, layerMask))
         {
-            onGround = true;
+            return true;
+        }
+        else
+        {
+            return false;
         }
     }
 
-    private void OnCollisionExit2D(Collision2D collision)
+    private void OnDrawGizmos()
     {
-        // Player is off the ground
-        if (collision.gameObject.tag == "Ground")
-        {
-            onGround = false;
-        }
+        Gizmos.color = Color.red;
+        Gizmos.DrawCube(transform.position - transform.up * castDistance, boxSize);
     }
+
+    //private void OnCollisionEnter2D(Collision2D collision)
+    //{
+        // Player is on the ground
+        //if (collision.gameObject.tag == "Ground")
+        //{
+            //onGround = true;
+        //}
+    //}
+
+    //private void OnCollisionExit2D(Collision2D collision)
+    //{
+        // Player is off the ground
+        //if (collision.gameObject.tag == "Ground")
+        //{
+            //onGround = false;
+        //}
+    //}
 
     private IEnumerator Dash()
     {
+        // Locking input
+        inputLock = true;
+        dashFinish = false;
         // Setting up dash
         canDash = false;
         float originalGravity = rb.gravityScale;
@@ -107,11 +150,11 @@ public class Player : MonoBehaviour
         tr.emitting = false;
         rb.velocity = new Vector2(0f, 0f);
 
+        // Unlocking input
+        inputLock = false;
+
         // Dash Cooldown
-        yield return new WaitForSeconds(_dashingTime);
-        if (onGround)
-        {
-            canDash = true;
-        }
+        yield return new WaitForSeconds(_dashingTime * 1.5f);
+        dashFinish = true;
     }
 }
